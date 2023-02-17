@@ -7,6 +7,7 @@ use bytemuck::{Pod,Zeroable, PodInOption, ZeroableInOption, TransparentWrapper};
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, TransparentWrapper)]
 pub struct ObjectId(pub NonZeroU64);
 
+
 unsafe impl ZeroableInOption for ObjectId{}
 unsafe impl PodInOption for ObjectId{}
 
@@ -15,9 +16,18 @@ unsafe impl PodInOption for ObjectId{}
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, TransparentWrapper, Pod, Zeroable)]
 pub struct StreamId(pub u64);
 
+
 impl StreamId{
     pub const STREAMS: Self = Self(0);
 }
+
+#[repr(transparent)]
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, TransparentWrapper, Pod, Zeroable)]
+pub struct SectorPos(pub u128);
+
+#[repr(transparent)]
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, TransparentWrapper, Pod, Zeroable)]
+pub struct AbsPos(pub u64);
 
 pub mod consts{
     pub const STREAMS_STREAM: &str = "Streams";
@@ -45,6 +55,9 @@ pub mod consts{
     pub const DEFAULT_PRINCIPAL: u128 = !0;
     pub const SYSTEM_PRINCIPAL: u128 = 0;
 
+    pub const VERSION_MAJOR: u16 = 0;
+    pub const VERSION_MINOR: u16 = 0;
+
 }
 
 bitflags::bitflags! {
@@ -61,6 +74,12 @@ bitflags::bitflags! {
 }
 
 impl StreamFlags{
+    pub const fn indirection(indr: u64) -> Self{
+        if indr>15{
+            panic!("Cannot specify indirection which is more than 15");
+        }
+        unsafe{Self::from_bits_unchecked(indr<<4)}
+    }
     pub fn get_indirection(&self) -> u64{
         ((*self)&Self::INDIRECTION_MASK).bits()>>4
     }
@@ -113,8 +132,10 @@ pub struct Object{
     pub __reserved33: [u8; 5],
     pub ty: ObjectType,
     pub flags: ObjectFlags,
+    pub __reserved44: [u8;4],
+    pub strings_stream: Option<NonZeroU64>,
     #[doc(hidden)]
-    pub __reserved44: [u8; 20],
+    pub __reserved56: [u8; 8],
 }
 
 bitflags::bitflags! {
@@ -228,6 +249,15 @@ bitflags::bitflags! {
 }
 
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, Pod, Zeroable)]
+#[repr(C,align(32))]
+pub struct VolumeSpan{
+    pub base_sector: u128,
+    pub extent: u64,
+    pub __reserved: u64,
+}
+
+
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, Pod, Zeroable)]
 #[repr(C,align(128))]
 pub struct RootDescriptor{
     pub magic: PhantomFSMagic,
@@ -239,9 +269,9 @@ pub struct RootDescriptor{
     pub volume_id_hi: u64,
     pub root_object_id: Option<ObjectId>,
     pub objtab_size: u64,
-    pub objtab_end: u128,
+    pub objtab_end: SectorPos,
     pub alloc_tab_size: u64,
-    pub alloc_tab_begin: u64,
+    pub alloc_tab_begin: AbsPos,
     pub label_ref: Option<NonZeroU64>,
     pub label: [u8; 32],
     pub header_size: u32,
