@@ -1,5 +1,7 @@
 use core::{num::NonZeroU64, mem::size_of, cmp::Ordering};
 
+use alloc::{string::String,vec::Vec};
+
 use bytemuck::Zeroable;
 use nonzero_ext::nonzero;
 
